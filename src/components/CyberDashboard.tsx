@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, useMotionValue, useSpring, useTransform, AnimatePresence } from "motion/react";
 import { Icon } from "@iconify/react";
 import { auth, db } from "../lib/firebase";
-import { collection, query, where, onSnapshot, doc, updateDoc, increment, deleteDoc, getDocs } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, updateDoc, increment, deleteDoc, getDocs, addDoc, setDoc } from "firebase/firestore";
 import CreateTaskModal from "./CreateTaskModal";
 import SettingsModal from "./SettingsModal";
 import TaskHistoryModal from "./TaskHistoryModal";
@@ -126,7 +126,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onCompleteToggle, onDelete, o
 
   // Check if time-locked
   useEffect(() => {
-    if (task.taskType !== 'instant' && task.targetTime && !isCompleted && !isRunning) {
+    if (task.targetTime && !isCompleted && !isRunning) {
       const checkLock = () => {
         const [h, m] = task.targetTime.split(':').map(Number);
         const target = new Date();
@@ -267,17 +267,34 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onCompleteToggle, onDelete, o
           <div className="flex justify-between items-start mb-4">
             <div className="flex items-center gap-3">
               {task.taskType === 'instant' ? (
-                <button
-                  onClick={() => onComplete(task.id, task.reward)}
+                <motion.button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isLocked) {
+                      setIsShaking(true);
+                      playGlitch();
+                      const notification = document.createElement('div');
+                      notification.className = "fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] bg-black/90 backdrop-blur-xl border border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.4)] rounded-full px-6 py-3 flex items-center gap-3";
+                      notification.innerHTML = `<span class="text-red-500 text-xl font-bold">!</span><span class="font-mono text-red-400 text-sm tracking-widest">ACCESS DENIED: Time locked</span>`;
+                      document.body.appendChild(notification);
+                      setTimeout(() => notification.remove(), 2500);
+                      return;
+                    }
+                    onCompleteToggle(task.id, false, task.reward);
+                  }}
                   disabled={isCompleted || isCelebrating}
+                  animate={isShaking ? { x: [-5, 5, -5, 5, 0] } : {}}
+                  transition={{ duration: 0.3 }}
                   className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
                     isCompleted || isCelebrating
                       ? "bg-green-500/20 border border-green-400 text-green-400 shadow-[0_0_10px_rgba(74,222,128,0.5)]" 
-                      : "bg-pink-500/10 border border-pink-400/50 hover:border-pink-400 text-pink-400 hover:shadow-[0_0_15px_rgba(236,72,153,0.5)]"
+                      : isLocked
+                      ? "bg-gray-500/10 border border-gray-500/50 text-gray-400 opacity-60 cursor-not-allowed hover:border-gray-500 hover:opacity-100"
+                      : "bg-pink-500/10 border border-pink-400/50 hover:border-pink-400 text-pink-400 hover:shadow-[0_0_15px_rgba(236,72,153,0.5)] cursor-pointer"
                   }`}
                 >
-                  <Icon icon={isCompleted || isCelebrating ? "ph:check-bold" : "ph:lightning-bold"} className="text-xl" />
-                </button>
+                  {isCompleted || isCelebrating ? <Icon icon="ph:check-bold" className="text-xl" /> : isLocked ? <Icon icon="ph:lock-fill" className="text-xl" /> : <Icon icon="ph:lightning-bold" className="text-xl" />}
+                </motion.button>
               ) : (
                 <motion.button 
                   onClick={handleToggleTimer}
@@ -334,9 +351,15 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onCompleteToggle, onDelete, o
                   {task.difficulty}
                 </span>
               )}
-              <span className="text-[9px] font-mono uppercase tracking-widest text-white/40 px-2">
-                [{task.attribute}]
-              </span>
+              {task.targetCount && task.targetCount > 1 ? (
+                <span className="text-[9px] font-mono uppercase tracking-widest text-cyan-300 px-2 flex items-center gap-1">
+                  <Icon icon="ph:chart-bar-fill" /> {task.currentCount || 0}/{task.targetCount}
+                </span>
+              ) : task.attribute ? (
+                <span className="text-[9px] font-mono uppercase tracking-widest text-white/40 px-2">
+                  [{task.attribute}]
+                </span>
+              ) : null}
             </div>
           </div>
 
@@ -422,6 +445,7 @@ export default function CyberDashboard() {
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [systemToast, setSystemToast] = useState<string | null>(null);
   const [historyTitle, setHistoryTitle] = useState<string | null>(null);
+  const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -482,10 +506,93 @@ export default function CyberDashboard() {
     // Fetch Tasks
     const q = query(collection(db, "tasks"), where("userId", "==", auth.currentUser.uid));
     const tasksUnsub = onSnapshot(q, (snapshot) => {
-      const today = new Date().toISOString().split('T')[0];
-      const fetchedTasks = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() }))
-        .filter((t: any) => t.createdAt && t.createdAt.startsWith(today));
+      const now = new Date();
+      const todayStr = now.toISOString().split('T')[0];
+      const allTasks: any[] = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      
+      allTasks.forEach((t: any) => {
+        const taskDate = t.createdAt ? t.createdAt.split('T')[0] : '';
+        
+        // 1. Daily resets for old tasks
+        if (taskDate && taskDate < todayStr) {
+          if (t.isDaily) {
+             updateDoc(doc(db, "tasks", t.id), {
+               status: 'pending',
+               isCompleted: false,
+               currentCount: 0,
+               rewardClaimed: false,
+               targetTime: t.baseTargetTime || t.targetTime,
+               createdAt: now.toISOString()
+             }).catch(console.error);
+          } else if (t.interval_minutes > 0 && (t.currentCount || 0) > 0) {
+             deleteDoc(doc(db, "tasks", t.id)).catch(console.error);
+          }
+        }
+        
+        // 2. Automated Expiration Sweep for TODAY's Pending Interval Tasks
+        if (t.status === 'pending' && t.taskType === 'instant' && t.interval_minutes > 0 && t.targetTime && taskDate === todayStr) {
+            const [h, m] = t.targetTime.split(':').map(Number);
+            const target = new Date();
+            target.setHours(h, m, 0, 0);
+            
+            const expiryTime = new Date(target);
+            expiryTime.setMinutes(expiryTime.getMinutes() + t.interval_minutes);
+            
+            if (now >= expiryTime) {
+                // Mark current as failed (missed)
+                updateDoc(doc(db, "tasks", t.id), { status: 'failed', isCompleted: false }).catch(console.error);
+                
+                // Fast forward through completely missed intervals
+                let nextTime = new Date(expiryTime);
+                let currentCount = (t.currentCount || 0) + 1;
+                const targetCount = t.targetCount || Math.max(1, Math.floor((24 * 60) / t.interval_minutes));
+                const baseId = t.id.includes('_clone_') ? t.id.split('_clone_')[0] : t.id;
+                
+                while (now >= new Date(nextTime.getTime() + t.interval_minutes * 60000) && currentCount < targetCount) {
+                    const hh = nextTime.getHours().toString().padStart(2, '0');
+                    const mm = nextTime.getMinutes().toString().padStart(2, '0');
+                    const { id, ...taskDataWithoutId } = t;
+                    
+                    setDoc(doc(db, "tasks", `${baseId}_clone_${currentCount}`), {
+                        ...taskDataWithoutId,
+                        targetTime: `${hh}:${mm}`,
+                        currentCount: currentCount,
+                        rewardClaimed: t.rewardClaimed || false,
+                        status: 'failed',
+                        isCompleted: false,
+                        createdAt: now.toISOString(),
+                        isDaily: false
+                    }).catch(console.error);
+                    
+                    currentCount++;
+                    nextTime.setMinutes(nextTime.getMinutes() + t.interval_minutes);
+                }
+                
+                if (currentCount < targetCount) {
+                    // Spawn the active interval
+                    const hh = nextTime.getHours().toString().padStart(2, '0');
+                    const mm = nextTime.getMinutes().toString().padStart(2, '0');
+                    const { id, ...taskDataWithoutId } = t;
+                    
+                    setDoc(doc(db, "tasks", `${baseId}_clone_${currentCount}`), {
+                        ...taskDataWithoutId,
+                        targetTime: `${hh}:${mm}`,
+                        currentCount: currentCount,
+                        rewardClaimed: t.rewardClaimed || false,
+                        status: 'pending',
+                        isCompleted: false,
+                        createdAt: now.toISOString(),
+                        isDaily: false
+                    }).catch(console.error);
+                }
+            }
+        }
+      });
+
+      const fetchedTasks = allTasks.filter((t: any) => {
+        const d = t.createdAt ? t.createdAt.split('T')[0] : '';
+        return d === todayStr || t.isDaily; 
+      });
       setTasks(fetchedTasks);
     });
 
@@ -503,6 +610,83 @@ export default function CyberDashboard() {
     const today = new Date().toISOString().split('T')[0];
     
     if (!currentStatus) {
+      const task = tasks.find(t => t.id === taskId);
+      
+      // Handle Interval/Counter Logic for Instant Tasks
+      if (task && task.taskType === 'instant' && task.interval_minutes && task.interval_minutes > 0) {
+        const targetCount = task.targetCount || Math.max(1, Math.floor((24 * 60) / task.interval_minutes));
+        const currentCount = (task.currentCount || 0) + 1;
+
+        if (currentCount < targetCount) {
+          let nextTargetTimeStr = task.targetTime;
+          if (task.targetTime) {
+            const now = new Date();
+            const nextTime = new Date();
+            const [hhStr, mmStr] = task.targetTime.split(':');
+            nextTime.setHours(parseInt(hhStr, 10), parseInt(mmStr, 10), 0, 0);
+            nextTime.setMinutes(nextTime.getMinutes() + task.interval_minutes);
+            
+            if (nextTime.getDate() === now.getDate() && nextTime.getMonth() === now.getMonth()) {
+              const hh = nextTime.getHours().toString().padStart(2, '0');
+              const mm = nextTime.getMinutes().toString().padStart(2, '0');
+              nextTargetTimeStr = `${hh}:${mm}`;
+            }
+          }
+
+          // Mark current instance as completed
+          await updateDoc(taskRef, {
+             status: 'completed',
+             isCompleted: true,
+             completedAt: new Date().toISOString()
+          });
+
+          // Spawn next interval instance (as a clone)
+          const { id, ...taskDataWithoutId } = task;
+          const baseId = task.id.includes('_clone_') ? task.id.split('_clone_')[0] : task.id;
+          await setDoc(doc(db, "tasks", `${baseId}_clone_${currentCount}`), {
+            ...taskDataWithoutId,
+            targetTime: nextTargetTimeStr,
+            currentCount: currentCount,
+            rewardClaimed: task.rewardClaimed || false,
+            status: 'pending',
+            isCompleted: false,
+            createdAt: new Date().toISOString(),
+            isDaily: false // Clones shouldn't trigger the daily reset, only the original
+          });
+          
+          setSystemToast(`Progress Logged: ${currentCount} / ${targetCount}. Next timer set for ${nextTargetTimeStr}`);
+          setTimeout(() => setSystemToast(null), 3000);
+
+          // Give points ONLY for the very first interval completion that day
+          if (!task.rewardClaimed) {
+            // Mark it as claimed so next clones know
+            await updateDoc(doc(db, "tasks", `${baseId}_clone_${currentCount}`), { rewardClaimed: true });
+            
+            const lastCompleted = userData.lastCompletedDate;
+            let newStreak = userData.streak || 0;
+            if (lastCompleted !== today) {
+              const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+              if (lastCompleted === yesterday) {
+                newStreak += 1;
+              } else {
+                newStreak = 1;
+              }
+            }
+            await updateDoc(userRef, { 
+              xp: increment(reward),
+              credits: increment(10),
+              [`activityMap.${today}`]: increment(1),
+              lastCompletedDate: today,
+              streak: newStreak
+            });
+          }
+          return;
+        } else {
+          // Final completion for this task
+          await updateDoc(taskRef, { currentCount: targetCount });
+        }
+      }
+
       // Mark as completed
       const lastCompleted = userData.lastCompletedDate;
       let newStreak = userData.streak || 0;
@@ -521,45 +705,6 @@ export default function CyberDashboard() {
         status: 'completed',
         completedAt: new Date().toISOString()
       });
-      
-      // Auto-Respawn Logic for Quick Action Intervals
-      const task = tasks.find(t => t.id === taskId);
-      if (task && task.taskType === 'instant' && task.interval_minutes && task.interval_minutes > 0) {
-        if (task.targetTime) {
-          const now = new Date();
-          const nextTime = new Date(now);
-          const [hhStr, mmStr] = task.targetTime.split(':');
-          nextTime.setHours(parseInt(hhStr, 10), parseInt(mmStr, 10), 0, 0);
-          
-          // Add the interval minutes to the original target time
-          nextTime.setMinutes(nextTime.getMinutes() + task.interval_minutes);
-          
-          // Ensure the next time is still on the same day
-          if (nextTime.getDate() === now.getDate() && nextTime.getMonth() === now.getMonth()) {
-            const hh = nextTime.getHours().toString().padStart(2, '0');
-            const mm = nextTime.getMinutes().toString().padStart(2, '0');
-            const nextTargetTimeStr = `${hh}:${mm}`;
-
-            await addDoc(collection(db, 'tasks'), {
-              userId: auth.currentUser.uid,
-              title: task.title,
-              desc: task.desc || '',
-              difficulty: task.difficulty,
-              durationMinutes: task.durationMinutes,
-              targetTime: nextTargetTimeStr,
-              interval_minutes: task.interval_minutes,
-              isDaily: task.isDaily,
-              reward: task.reward,
-              icon: task.icon,
-              iconColor: task.iconColor,
-              taskType: task.taskType,
-              status: 'pending',
-              timerStartedAt: null,
-              createdAt: new Date().toISOString()
-            });
-          }
-        }
-      }
 
       await updateDoc(userRef, { 
         xp: increment(reward),
@@ -588,50 +733,71 @@ export default function CyberDashboard() {
   const handleStartTask = async (taskId: string) => {
     if (!auth.currentUser) return;
     
-    // Query Firestore to check if ANY task is already in_progress
-    const activeQuery = query(collection(db, "tasks"), where("userId", "==", auth.currentUser.uid), where("status", "==", "in_progress"));
-    const snapshot = await getDocs(activeQuery);
+    // Use local state to check if ANY task is already in_progress
+    const hasActiveTask = tasks.some(t => t.status === 'in_progress');
     
-    if (!snapshot.empty) {
+    if (hasActiveTask) {
       alert('Only one task can be active at a time.');
       return;
     }
     
-    const taskRef = doc(db, "tasks", taskId);
-    await updateDoc(taskRef, { 
-      status: 'in_progress',
-      timerStartedAt: Date.now() // Use client timestamp for simple elapsed calc
-    });
+    try {
+      const taskRef = doc(db, "tasks", taskId);
+      await updateDoc(taskRef, { 
+        status: 'in_progress',
+        timerStartedAt: Date.now()
+      });
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handlePauseTask = async (taskId: string, elapsedMs: number) => {
-    const taskRef = doc(db, "tasks", taskId);
-    await updateDoc(taskRef, { 
-      status: 'paused',
-      paused_elapsed_time: elapsedMs
-    });
+    try {
+      const taskRef = doc(db, "tasks", taskId);
+      await updateDoc(taskRef, { 
+        status: 'paused',
+        paused_elapsed_time: elapsedMs
+      });
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleResumeTask = async (taskId: string, pausedElapsedMs: number) => {
     if (!auth.currentUser) return;
     
-    const activeQuery = query(collection(db, "tasks"), where("userId", "==", auth.currentUser.uid), where("status", "==", "in_progress"));
-    const snapshot = await getDocs(activeQuery);
+    const hasActiveTask = tasks.some(t => t.status === 'in_progress');
     
-    if (!snapshot.empty) {
+    if (hasActiveTask) {
       alert('Only one task can be active at a time.');
       return;
     }
 
-    const taskRef = doc(db, "tasks", taskId);
-    await updateDoc(taskRef, { 
-      status: 'in_progress',
-      timerStartedAt: Date.now() - pausedElapsedMs
-    });
+    try {
+      const taskRef = doc(db, "tasks", taskId);
+      await updateDoc(taskRef, { 
+        status: 'in_progress',
+        timerStartedAt: Date.now() - pausedElapsedMs
+      });
+    } catch (e) {
+      console.error(e);
+    }
   };
 
-  const handleDeleteTask = async (taskId: string) => {
-    await deleteDoc(doc(db, "tasks", taskId));
+  const handleDeleteTask = (taskId: string) => {
+    setTaskToDelete(taskId);
+  };
+
+  const confirmDeleteTask = async () => {
+    if (taskToDelete) {
+      await deleteDoc(doc(db, "tasks", taskToDelete));
+      setTaskToDelete(null);
+    }
+  };
+
+  const cancelDeleteTask = () => {
+    setTaskToDelete(null);
   };
 
   const handleBuyToken = async () => {
@@ -667,7 +833,7 @@ export default function CyberDashboard() {
 
       const taskDate = t.createdAt ? t.createdAt.split('T')[0] : todayStr;
       
-      if (taskDate < todayStr) {
+      if (taskDate < todayStr || t.status === 'failed') {
         isMissed = true;
       }
 
@@ -1027,6 +1193,52 @@ export default function CyberDashboard() {
           </aside>
         </main>
       </div>
+
+      {/* Custom Delete Confirmation Modal */}
+      <AnimatePresence>
+        {taskToDelete && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="w-full max-w-sm bg-[#050505]/95 border border-red-500/50 rounded-2xl p-6 shadow-[0_0_40px_rgba(239,68,68,0.2)] text-center relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-500 to-orange-500" />
+              
+              <Icon icon="ph:warning-octagon-fill" className="text-5xl text-red-500 mx-auto mb-4 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
+              
+              <h2 className="text-xl font-black font-mono uppercase tracking-widest text-white mb-2">
+                System Warning
+              </h2>
+              
+              <p className="text-sm text-white/60 mb-8">
+                Are you sure you want to permanently delete this quest from the system? This action cannot be undone.
+              </p>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={cancelDeleteTask}
+                  className="flex-1 py-3 px-4 rounded-xl bg-white/5 border border-white/10 text-white font-mono text-xs uppercase tracking-widest hover:bg-white/10 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteTask}
+                  className="flex-1 py-3 px-4 rounded-xl bg-red-500/20 border border-red-500 text-red-500 font-bold font-mono text-xs uppercase tracking-widest hover:bg-red-500 hover:text-white hover:shadow-[0_0_20px_rgba(239,68,68,0.6)] transition-all"
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <GlobalCommsDrawer />
     </div>

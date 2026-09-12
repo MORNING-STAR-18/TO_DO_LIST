@@ -142,8 +142,13 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: { is
 
     // Calculate final interval minutes
     let finalIntervalMinutes = 0;
+    let targetCount = 1;
     if (taskType === 'instant' && !doesNotRepeat) {
       finalIntervalMinutes = intervalUnit === 'HOURS' ? intervalValue * 60 : intervalValue;
+      if (finalIntervalMinutes > 0) {
+        targetCount = Math.floor((24 * 60) / finalIntervalMinutes);
+        if (targetCount < 1) targetCount = 1;
+      }
     }
 
     try {
@@ -154,7 +159,10 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: { is
         difficulty: taskType === 'instant' ? 'Tutorial' : difficulty,
         durationMinutes: taskType === 'instant' ? 0 : Number(duration),
         targetTime: finalTargetTime,
+        baseTargetTime: finalTargetTime,
         interval_minutes: finalIntervalMinutes,
+        targetCount,
+        currentCount: 0,
         isDaily,
         reward: taskType === 'instant' ? 20 : reward,
         icon,
@@ -251,7 +259,7 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: { is
                     whileTap={{ scale: 0.9 }}
                     onClick={() => {
                       setTitle(preset.title);
-                      if (taskType === 'timed') setDifficulty(preset.difficulty);
+                      if (taskType === 'timed') setDifficulty((preset as any).difficulty);
                     }}
                     className={`cursor-pointer bg-white/5 backdrop-blur-md border px-3 py-1.5 rounded-full flex items-center gap-2 transition-colors z-20 ${taskType === 'instant' ? 'border-pink-500/30 text-pink-400 hover:border-pink-400/60 hover:bg-pink-900/30 hover:shadow-[0_0_15px_rgba(236,72,153,0.3)] shadow-[0_0_10px_rgba(236,72,153,0.1)]' : 'border-cyan-400/30 text-cyan-300 hover:border-cyan-400/60 hover:bg-cyan-900/30 hover:shadow-[0_0_15px_rgba(34,211,238,0.3)] shadow-[0_0_10px_rgba(34,211,238,0.1)]'}`}
                   >
@@ -465,49 +473,23 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: { is
 
               <div className="grid grid-cols-2 gap-4">
                 {taskType === 'timed' && (
-                  <div className="col-span-2 relative" ref={difficultyDropdownRef}>
+                  <div className="col-span-2 relative">
                     <label className="block text-[10px] text-cyan-400 font-mono uppercase tracking-widest mb-1">Difficulty</label>
                     <div className="relative">
-                      <input
-                        type="text"
+                      <select
                         value={difficulty}
                         onChange={(e) => setDifficulty(e.target.value)}
-                        onFocus={() => setIsDifficultyDropdownOpen(true)}
-                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-400 focus:bg-cyan-900/10 text-sm transition-colors"
-                        placeholder="Type or select..."
-                      />
-                      <div 
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 cursor-pointer p-1"
-                        onClick={() => setIsDifficultyDropdownOpen(!isDifficultyDropdownOpen)}
+                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-400 focus:bg-cyan-900/10 text-sm transition-colors appearance-none cursor-pointer"
                       >
-                        <Icon icon="ph:caret-down-bold" className={`transition-transform ${isDifficultyDropdownOpen ? 'rotate-180' : ''}`} />
+                        <option value="Tutorial" className="bg-[#0a0a0f] text-white">Tutorial</option>
+                        <option value="Medium" className="bg-[#0a0a0f] text-white">Medium</option>
+                        <option value="Hard" className="bg-[#0a0a0f] text-white">Hard</option>
+                        <option value="Epic" className="bg-[#0a0a0f] text-white">Epic</option>
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none p-1">
+                        <Icon icon="ph:caret-down-bold" />
                       </div>
                     </div>
-                    
-                    <AnimatePresence>
-                      {isDifficultyDropdownOpen && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          className="absolute z-50 w-full mt-2 bg-[#0a0a0f]/95 border border-cyan-500/30 rounded-xl overflow-hidden backdrop-blur-md shadow-[0_0_20px_rgba(34,211,238,0.15)]"
-                        >
-                          {['Tutorial', 'Medium', 'Hard', 'Epic'].map((opt) => (
-                            <div
-                              key={opt}
-                              className="px-4 py-3 text-sm text-white/80 hover:text-cyan-300 hover:bg-cyan-500/10 cursor-pointer transition-colors flex items-center gap-2"
-                              onClick={() => {
-                                setDifficulty(opt);
-                                setIsDifficultyDropdownOpen(false);
-                              }}
-                            >
-                              <div className={`w-1.5 h-1.5 rounded-full ${difficulty === opt ? 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]' : 'bg-transparent'}`} />
-                              {opt}
-                            </div>
-                          ))}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
                   </div>
                 )}
               </div>

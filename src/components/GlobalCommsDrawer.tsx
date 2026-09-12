@@ -7,6 +7,7 @@ import { useCyberAudio } from '../hooks/useCyberAudio';
 
 export default function GlobalCommsDrawer() {
   const [isOpen, setIsOpen] = useState(false);
+  const [isFullMode, setIsFullMode] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [userData, setUserData] = useState<any>(null);
@@ -14,7 +15,7 @@ export default function GlobalCommsDrawer() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { playHover, playSelect } = useCyberAudio();
 
-  // Fetch current user data (for avatar/name)
+  // Fetch current user data (for avatar/name and phone verification status)
   useEffect(() => {
     if (!auth.currentUser) return;
     const userRef = collection(db, 'users');
@@ -116,12 +117,12 @@ export default function GlobalCommsDrawer() {
         }}
         className="fixed right-0 top-1/2 -translate-y-1/2 z-40 bg-black/50 border border-cyan-500/50 py-4 px-2 rounded-l-xl backdrop-blur-md cursor-pointer hover:bg-cyan-500/20 hover:border-cyan-400 transition-all flex flex-col items-center gap-4 group shadow-[0_0_15px_rgba(34,211,238,0.2)]"
       >
-        <Icon icon="ph:chat-teardrop-text-fill" className="text-cyan-400 text-2xl group-hover:drop-shadow-[0_0_8px_rgba(34,211,238,1)]" />
+        <Icon icon="ph:users-three-fill" className="text-cyan-400 text-2xl group-hover:drop-shadow-[0_0_8px_rgba(34,211,238,1)]" />
         <span 
           style={{ writingMode: 'vertical-rl' }} 
           className="text-cyan-400 font-mono text-[10px] tracking-[0.2em] uppercase rotate-180"
         >
-          Comms Uplink
+          Community
         </span>
       </button>
 
@@ -135,31 +136,39 @@ export default function GlobalCommsDrawer() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsOpen(false)}
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 sm:hidden"
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
             />
             
             {/* Drawer */}
             <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
+              initial={{ x: '100%', width: 'min(100vw, 450px)' }}
+              animate={{ x: 0, width: isFullMode ? '100%' : 'min(100vw, 450px)' }}
               exit={{ x: '100%' }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 right-0 w-full sm:w-[400px] z-50 bg-[#050505]/95 backdrop-blur-2xl border-l border-cyan-500/50 shadow-[-20px_0_50px_rgba(34,211,238,0.15)] flex flex-col"
+              transition={{ type: "spring", damping: 25, stiffness: 200, width: { type: "spring", damping: 20, stiffness: 150 } }}
+              className="fixed inset-y-0 right-0 z-50 bg-[#050505]/95 backdrop-blur-2xl border-l border-cyan-500/50 shadow-[-20px_0_50px_rgba(34,211,238,0.15)] flex flex-col overflow-hidden"
             >
               {/* Header */}
               <div className="flex items-center justify-between p-6 border-b border-white/10 bg-gradient-to-r from-transparent to-cyan-900/20">
                 <div className="flex items-center gap-3">
                   <Icon icon="ph:globe-hemisphere-east-fill" className="text-2xl text-cyan-400 drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
                   <h2 className="text-xl font-black font-mono tracking-widest uppercase text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">
-                    Global Terminal
+                    Community Terminal
                   </h2>
                 </div>
-                <button 
-                  onClick={() => setIsOpen(false)}
-                  className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 transition-colors"
-                >
-                  <Icon icon="ph:x-bold" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => setIsFullMode(!isFullMode)}
+                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white/50 hover:text-white hover:bg-cyan-900/30 hover:border-cyan-500/50 transition-colors"
+                  >
+                    <Icon icon={isFullMode ? "ph:corners-in-bold" : "ph:corners-out-bold"} />
+                  </button>
+                  <button 
+                    onClick={() => setIsOpen(false)}
+                    className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white/50 hover:text-white hover:bg-red-500/20 hover:border-red-500/50 transition-colors"
+                  >
+                    <Icon icon="ph:x-bold" />
+                  </button>
+                </div>
               </div>
 
               {/* Messages Area */}
@@ -202,22 +211,38 @@ export default function GlobalCommsDrawer() {
 
               {/* Input Area */}
               <div className="p-4 border-t border-white/10 bg-black/40">
-                <form onSubmit={handleSend} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder="Transmit message..."
-                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 outline-none focus:border-cyan-500/50 focus:bg-cyan-900/10 transition-all font-mono"
-                  />
-                  <button 
-                    type="submit"
-                    disabled={!newMessage.trim()}
-                    className="h-11 px-4 flex items-center justify-center rounded-xl bg-cyan-500/20 border border-cyan-400 text-cyan-400 font-black font-mono tracking-widest text-[10px] hover:bg-cyan-400 hover:text-black hover:shadow-[0_0_20px_rgba(34,211,238,0.6)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    SEND <Icon icon="ph:paper-plane-right-fill" className="ml-2 text-sm" />
-                  </button>
-                </form>
+                {userData?.phoneVerified ? (
+                  <form onSubmit={handleSend} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      placeholder="Transmit message..."
+                      className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-white/30 outline-none focus:border-cyan-500/50 focus:bg-cyan-900/10 transition-all font-mono"
+                    />
+                    <button 
+                      type="submit"
+                      disabled={!newMessage.trim()}
+                      className="h-11 px-4 flex items-center justify-center rounded-xl bg-cyan-500/20 border border-cyan-400 text-cyan-400 font-black font-mono tracking-widest text-[10px] hover:bg-cyan-400 hover:text-black hover:shadow-[0_0_20px_rgba(34,211,238,0.6)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      SEND <Icon icon="ph:paper-plane-right-fill" className="ml-2 text-sm" />
+                    </button>
+                  </form>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-4 px-6 bg-[#1a0505]/80 border border-red-500/30 rounded-xl relative overflow-hidden group shadow-[0_0_15px_rgba(239,68,68,0.1)]">
+                    <div className="absolute inset-0 bg-[repeating-linear-gradient(45deg,transparent,transparent_10px,rgba(239,68,68,0.03)_10px,rgba(239,68,68,0.03)_20px)]" />
+                    <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-red-500/50 to-transparent" />
+                    <div className="absolute bottom-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-red-500/50 to-transparent" />
+                    
+                    <span className="text-red-400 text-xs font-mono font-bold tracking-[0.2em] uppercase flex items-center gap-2 relative z-10 mb-1.5 drop-shadow-[0_0_8px_rgba(248,113,113,0.8)]">
+                      <Icon icon="ph:lock-key-fill" className="text-lg" />
+                      Comms Locked
+                    </span>
+                    <span className="text-red-300/60 text-[10px] font-mono text-center relative z-10">
+                      Identity verification required. Link your phone number in Neural Profile to transmit.
+                    </span>
+                  </div>
+                )}
               </div>
             </motion.div>
           </>

@@ -16,12 +16,18 @@ export default function App() {
   useEffect(() => {
     async function checkUser() {
       if (user) {
-        const docRef = doc(db, 'users', user.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setIsNewUser(false);
-        } else {
-          setIsNewUser(true);
+        try {
+          const docRef = doc(db, 'users', user.uid);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            setIsNewUser(false);
+          } else {
+            setIsNewUser(true);
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+          // Fallback to false if offline to prevent locking out returning users
+          setIsNewUser(false); 
         }
       }
       setCheckingDb(false);

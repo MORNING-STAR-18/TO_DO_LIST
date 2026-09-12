@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Icon } from '@iconify/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 import { Country, State, City } from 'country-state-city';
+import { doc, updateDoc } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase';
 
 interface NeuralProfileModalProps {
   isOpen: boolean;
@@ -140,9 +142,27 @@ export default function NeuralProfileModal({ isOpen, onClose, userData, tasks }:
     }
   };
 
-  const handleSaveProfile = () => {
-    // In a real app, you would save this to Firebase here
-    setIsEditingProfile(false);
+  const handleSaveProfile = async () => {
+    if (!auth.currentUser) return;
+    try {
+      const updateData: any = {
+        alias: editName,
+        location: editLocation,
+        phone: editCommLink,
+      };
+      // If they completed the mock OTP step successfully during this edit session
+      if (otpStatus === 'verified') {
+         updateData.phoneVerified = true;
+      } else if (editCommLink !== userData?.phone) {
+         // If they changed the phone number but didn't verify
+         updateData.phoneVerified = false;
+      }
+      
+      await updateDoc(doc(db, "users", auth.currentUser.uid), updateData);
+      setIsEditingProfile(false);
+    } catch (e) {
+      console.error("Error saving profile", e);
+    }
   };
 
   const handleCancelEdit = () => {
@@ -205,6 +225,17 @@ export default function NeuralProfileModal({ isOpen, onClose, userData, tasks }:
   // Auto-scroll to the right (Today) for the heatmap
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
+    if (userData) {
+      setEditName(userData.alias || '');
+      setEditLocation(userData.location || '');
+      setEditCommLink(userData.phone || '');
+      if (userData.phoneVerified) {
+        setOtpStatus('verified');
+      }
+    }
+  }, [userData]);
+
+  React.useEffect(() => {
     if (isOpen && scrollContainerRef.current && !isEditingProfile) {
       setTimeout(() => {
         if (scrollContainerRef.current) {
@@ -264,7 +295,10 @@ export default function NeuralProfileModal({ isOpen, onClose, userData, tasks }:
                       <h3 className="text-sm text-cyan-400 font-mono uppercase tracking-widest mb-1">Active User</h3>
                       <p className="text-3xl font-bold text-white tracking-widest">{userData?.alias || 'Unknown'}</p>
                       <button 
-                        onClick={() => setIsEditingProfile(true)}
+                        onClick={() => {
+                          setIsEditingProfile(true);
+                          setOtpStatus(userData?.phoneVerified ? 'verified' : 'idle');
+                        }}
                         className="mt-3 px-4 py-1.5 border border-cyan-400/50 bg-cyan-500/10 text-cyan-400 text-[10px] font-mono font-bold uppercase tracking-widest rounded-full hover:bg-cyan-500/20 hover:shadow-[0_0_15px_rgba(34,211,238,0.3)] transition-all flex items-center gap-2"
                       >
                         <Icon icon="ph:pencil-simple-fill" /> Edit Profile

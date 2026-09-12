@@ -130,8 +130,7 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onCompleteToggle, onDelete, o
         const [h, m] = task.targetTime.split(':').map(Number);
         const target = new Date();
         target.setHours(h, m, 0, 0);
-        // Locked if current time is more than 15 minutes before target time
-        target.setMinutes(target.getMinutes() - 15);
+        // Locked if current time is strictly before target time
         setIsLocked(new Date() < target);
       };
       checkLock();
@@ -446,6 +445,30 @@ export default function CyberDashboard() {
     const interval = setInterval(() => setCurrentTime(new Date()), 60000);
     return () => clearInterval(interval);
   }, []);
+
+  // Handle Android/Browser Back Button for Modals
+  useEffect(() => {
+    const isAnyModalOpen = isModalOpen || isSettingsOpen || isProfileOpen || isAddUserModalOpen || historyTitle !== null;
+    
+    if (isAnyModalOpen) {
+      // Push a new state to the history when a modal opens
+      window.history.pushState({ modalOpen: true }, "");
+    }
+
+    const handlePopState = (e: PopStateEvent) => {
+      if (isAnyModalOpen) {
+        // Intercept back button to close modals instead of leaving app
+        setIsModalOpen(false);
+        setIsSettingsOpen(false);
+        setIsProfileOpen(false);
+        setIsAddUserModalOpen(false);
+        setHistoryTitle(null);
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [isModalOpen, isSettingsOpen, isProfileOpen, isAddUserModalOpen, historyTitle]);
 
   useEffect(() => {
     if (!auth.currentUser) return;

@@ -1,7 +1,8 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Icon } from '@iconify/react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
+import { Country, State, City } from 'country-state-city';
 
 interface NeuralProfileModalProps {
   isOpen: boolean;
@@ -9,6 +10,79 @@ interface NeuralProfileModalProps {
   userData: any;
   tasks: any[];
 }
+
+// --- Custom Select Component for Location Modal ---
+const LocationDropdown = ({ placeholder, options, value, onChange, disabled }: { placeholder: string, options: any[], value: string, onChange: (val: string, code: string) => void, disabled?: boolean }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredOptions = useMemo(() => {
+    return options.filter(opt => opt.name.toLowerCase().includes(search.toLowerCase()));
+  }, [options, search]);
+
+  return (
+    <div className="relative flex-1" ref={dropdownRef}>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full flex items-center justify-between px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/10'}`}
+      >
+        <span className="truncate">{value || placeholder}</span>
+        <Icon icon="ph:caret-down-bold" className="text-white/50 text-xs ml-2 flex-shrink-0" />
+      </button>
+
+      <AnimatePresence>
+        {isOpen && !disabled && (
+          <motion.div
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 5 }}
+            className="absolute z-[300] top-full left-0 w-full mt-1 bg-[#1e2329] border border-white/10 rounded-lg shadow-2xl overflow-hidden flex flex-col"
+            style={{ maxHeight: '250px' }}
+          >
+            <div className="p-2 border-b border-white/10 relative">
+               <Icon icon="ph:magnifying-glass-bold" className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+               <input 
+                 type="text" 
+                 autoFocus
+                 value={search}
+                 onChange={(e) => setSearch(e.target.value)}
+                 placeholder="Search..."
+                 className="w-full bg-black/40 border border-white/10 rounded-md py-1.5 pl-8 pr-2 text-sm text-white outline-none focus:border-blue-500"
+               />
+            </div>
+            <div className="overflow-y-auto custom-scrollbar flex-1 py-1">
+              {filteredOptions.length > 0 ? filteredOptions.map((opt, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => { onChange(opt.name, opt.isoCode || opt.stateCode); setIsOpen(false); setSearch(''); }}
+                  className="w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-blue-600 hover:text-white transition-colors truncate"
+                >
+                  {opt.name}
+                </button>
+              )) : (
+                <div className="px-3 py-4 text-center text-white/40 text-sm">No results</div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
 
 export default function NeuralProfileModal({ isOpen, onClose, userData, tasks }: NeuralProfileModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -19,6 +93,37 @@ export default function NeuralProfileModal({ isOpen, onClose, userData, tasks }:
   const [editName, setEditName] = useState(userData?.alias || '');
   const [editLocation, setEditLocation] = useState(userData?.location || '');
   const [editCommLink, setEditCommLink] = useState(userData?.phone || '');
+  
+  // Location Modal States
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const [locCountry, setLocCountry] = useState({ name: '', code: '' });
+  const [locState, setLocState] = useState({ name: '', code: '' });
+  const [locCity, setLocCity] = useState({ name: '' });
+
+  // OTP States
+  const [otpStatus, setOtpStatus] = useState<'idle' | 'sending' | 'pending' | 'verified'>('idle');
+  const [otpCode, setOtpCode] = useState('');
+  
+  // Confirmation State
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  
+  // Upload Menu State
+  const [isUploadMenuOpen, setIsUploadMenuOpen] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSendOtp = () => {
+    if (!editCommLink) return;
+    setOtpStatus('sending');
+    setTimeout(() => {
+      setOtpStatus('pending');
+    }, 1500);
+  };
+
+  const handleVerifyOtp = () => {
+    if (otpCode.length > 3) {
+      setOtpStatus('verified');
+    }
+  };
 
   const triggerFileInput = () => {
     if (fileInputRef.current) {
@@ -31,6 +136,7 @@ export default function NeuralProfileModal({ isOpen, onClose, userData, tasks }:
     if (file) {
       const url = URL.createObjectURL(file);
       setAvatarUrl(url);
+      setIsUploadMenuOpen(false);
     }
   };
 
@@ -301,20 +407,28 @@ export default function NeuralProfileModal({ isOpen, onClose, userData, tasks }:
                           ref={fileInputRef} 
                           onChange={handleImageUpload} 
                         />
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          capture="user"
+                          className="hidden" 
+                          ref={cameraInputRef} 
+                          onChange={handleImageUpload} 
+                        />
                       </div>
                     </div>
                     <div className="flex flex-col gap-3 w-full sm:w-auto">
                       <button 
-                        onClick={triggerFileInput}
+                        onClick={() => setIsUploadMenuOpen(true)}
                         className="px-6 py-3 bg-cyan-500/10 border border-cyan-400/50 text-cyan-400 font-mono font-bold uppercase tracking-widest rounded-xl hover:bg-cyan-500/20 hover:border-cyan-400 hover:shadow-[0_0_15px_rgba(34,211,238,0.3)] transition-all flex items-center justify-center gap-2"
                       >
-                        <Icon icon="ph:upload-simple-bold" className="text-lg" /> Change Uplink
+                        <Icon icon="ph:upload-simple-bold" className="text-lg" /> Upload Photo
                       </button>
                       <button 
-                        onClick={() => setAvatarUrl(null)}
+                        onClick={() => setIsDeleteConfirmOpen(true)}
                         className="px-6 py-3 bg-red-500/10 border border-red-500/30 text-red-400 font-mono font-bold uppercase tracking-widest rounded-xl hover:bg-red-500/20 hover:border-red-400 hover:shadow-[0_0_15px_rgba(248,113,113,0.2)] transition-all flex items-center justify-center gap-2"
                       >
-                        <Icon icon="ph:trash-bold" className="text-lg" /> Purge Data
+                        <Icon icon="ph:trash-bold" className="text-lg" /> Remove Photo
                       </button>
                     </div>
                   </div>
@@ -339,33 +453,85 @@ export default function NeuralProfileModal({ isOpen, onClose, userData, tasks }:
 
                     <div>
                       <label className="block text-[10px] text-cyan-400 font-mono uppercase tracking-widest mb-1.5 ml-1">Location / Base of Operations</label>
-                      <div className="relative">
+                      <div 
+                        className="relative cursor-pointer group"
+                        onClick={() => setIsLocationModalOpen(true)}
+                      >
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Icon icon="ph:map-pin-fill" className="text-white/30 text-lg" />
+                          <Icon icon="ph:map-pin-fill" className="text-white/30 text-lg group-hover:text-cyan-400 transition-colors" />
                         </div>
-                        <input
-                          type="text"
-                          value={editLocation}
-                          onChange={(e) => setEditLocation(e.target.value)}
-                          placeholder="e.g., Night City"
-                          className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white outline-none focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(34,211,238,0.3)] transition-all font-mono text-sm"
-                        />
+                        <div className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white outline-none group-hover:border-cyan-400 group-hover:shadow-[0_0_15px_rgba(34,211,238,0.3)] transition-all font-mono text-sm flex items-center h-[46px]">
+                          {editLocation ? <span>{editLocation}</span> : <span className="text-white/40">Select Location...</span>}
+                        </div>
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[10px] text-cyan-400 font-mono uppercase tracking-widest mb-1.5 ml-1">Comm-Link (Optional)</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Icon icon="ph:phone-fill" className="text-white/30 text-lg" />
+                      <label className="block text-[10px] text-cyan-400 font-mono uppercase tracking-widest mb-1.5 ml-1">Comm-Link / Phone Number</label>
+                      <div className="flex flex-col gap-3">
+                        <div className="relative flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                              <Icon icon="ph:phone-fill" className="text-white/30 text-lg" />
+                            </div>
+                            <input
+                              type="text"
+                              value={editCommLink}
+                              onChange={(e) => {
+                                setEditCommLink(e.target.value);
+                                if (otpStatus !== 'idle') setOtpStatus('idle');
+                              }}
+                              disabled={otpStatus === 'verified' || otpStatus === 'pending' || otpStatus === 'sending'}
+                              placeholder="e.g., +1 234 567 8900"
+                              className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white outline-none focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(34,211,238,0.3)] transition-all font-mono text-sm disabled:opacity-50"
+                            />
+                          </div>
+                          {otpStatus === 'idle' && editCommLink && (
+                             <button
+                               onClick={handleSendOtp}
+                               className="px-4 py-3 bg-blue-600/20 border border-blue-500/50 text-blue-400 rounded-xl font-mono text-xs font-bold hover:bg-blue-600/40 hover:text-white transition-colors"
+                             >
+                               VERIFY
+                             </button>
+                          )}
+                          {otpStatus === 'sending' && (
+                             <button disabled className="px-4 py-3 bg-blue-600/10 border border-blue-500/20 text-blue-400/50 rounded-xl font-mono text-xs font-bold flex items-center gap-2">
+                               <Icon icon="ph:spinner-gap-bold" className="animate-spin" /> SENDING
+                             </button>
+                          )}
+                          {otpStatus === 'verified' && (
+                             <button disabled className="px-4 py-3 bg-green-500/20 border border-green-500/50 text-green-400 rounded-xl font-mono text-xs font-bold flex items-center gap-2">
+                               <Icon icon="ph:check-circle-fill" className="text-lg" /> VERIFIED
+                             </button>
+                          )}
                         </div>
-                        <input
-                          type="text"
-                          value={editCommLink}
-                          onChange={(e) => setEditCommLink(e.target.value)}
-                          placeholder="Encrypted Number..."
-                          className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-3 text-white outline-none focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(34,211,238,0.3)] transition-all font-mono text-sm"
-                        />
+                        
+                        {otpStatus === 'pending' && (
+                          <motion.div 
+                            initial={{ opacity: 0, height: 0 }} 
+                            animate={{ opacity: 1, height: 'auto' }} 
+                            className="flex items-center gap-2 bg-black/40 p-3 rounded-xl border border-blue-500/30"
+                          >
+                             <div className="relative flex-1">
+                               <Icon icon="ph:password-fill" className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 text-lg" />
+                               <input
+                                 type="text"
+                                 value={otpCode}
+                                 onChange={(e) => setOtpCode(e.target.value)}
+                                 placeholder="Enter 6-digit OTP"
+                                 className="w-full bg-black/40 border border-white/10 rounded-lg pl-10 pr-4 py-2 text-white outline-none focus:border-blue-400 font-mono text-sm"
+                                 maxLength={6}
+                               />
+                             </div>
+                             <button
+                               onClick={handleVerifyOtp}
+                               disabled={otpCode.length < 4}
+                               className="px-4 py-2 bg-blue-600 text-white rounded-lg font-mono text-xs font-bold hover:bg-blue-500 transition-colors disabled:opacity-50"
+                             >
+                               CONFIRM
+                             </button>
+                          </motion.div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -390,6 +556,172 @@ export default function NeuralProfileModal({ isOpen, onClose, userData, tasks }:
             )}
 
           </motion.div>
+
+          {/* Nested Location Modal */}
+          <AnimatePresence>
+            {isLocationModalOpen && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md rounded-3xl"
+              >
+                <motion.div 
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.95, opacity: 0 }}
+                  className="bg-[#1a1e23] border border-white/10 rounded-xl p-6 w-full max-w-md shadow-[0_0_40px_rgba(0,0,0,0.8)] relative mx-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <h4 className="text-white font-bold mb-6 flex items-center gap-2 text-lg">
+                    <Icon icon="ph:info-fill" className="text-blue-500 text-xl" /> Update Your Location
+                  </h4>
+                  
+                  <div className="flex flex-col gap-4 mb-8">
+                    <LocationDropdown 
+                      placeholder="Country/Region"
+                      options={Country.getAllCountries()}
+                      value={locCountry.name}
+                      onChange={(name, code) => {
+                        setLocCountry({ name, code });
+                        setLocState({ name: '', code: '' });
+                        setLocCity({ name: '' });
+                      }}
+                    />
+                    
+                    <LocationDropdown 
+                      placeholder="State/Province"
+                      options={locCountry.code ? State.getStatesOfCountry(locCountry.code) : []}
+                      value={locState.name}
+                      disabled={!locCountry.code}
+                      onChange={(name, code) => {
+                        setLocState({ name, code });
+                        setLocCity({ name: '' });
+                      }}
+                    />
+                    
+                    <LocationDropdown 
+                      placeholder="City/Town"
+                      options={locState.code ? City.getCitiesOfState(locCountry.code, locState.code) : []}
+                      value={locCity.name}
+                      disabled={!locState.code}
+                      onChange={(name, _code) => {
+                        setLocCity({ name });
+                      }}
+                    />
+                  </div>
+                  
+                  <div className="flex justify-end gap-3">
+                    <button 
+                      onClick={() => setIsLocationModalOpen(false)}
+                      className="px-5 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={() => {
+                        const parts = [locCity.name, locCountry.name].filter(Boolean);
+                        if (parts.length > 0) {
+                           setEditLocation(parts.join(', '));
+                        }
+                        setIsLocationModalOpen(false);
+                      }}
+                      className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors shadow-[0_0_15px_rgba(37,99,235,0.4)]"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Nested Delete Confirmation Modal */}
+          <AnimatePresence>
+            {isDeleteConfirmOpen && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md rounded-3xl"
+              >
+                <motion.div 
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.95, opacity: 0 }}
+                  className="bg-[#1a1e23] border border-red-500/30 rounded-xl p-6 w-full max-w-sm shadow-[0_0_40px_rgba(239,68,68,0.2)] relative mx-4 text-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Icon icon="ph:warning-circle-fill" className="text-red-500 text-5xl mx-auto mb-4" />
+                  <h4 className="text-white font-bold mb-2 text-lg uppercase tracking-wider font-mono">Remove Avatar</h4>
+                  <p className="text-white/60 text-sm mb-6">Are you sure you want to remove your profile photo? This action cannot be undone.</p>
+                  
+                  <div className="flex justify-center gap-4">
+                    <button 
+                      onClick={() => setIsDeleteConfirmOpen(false)}
+                      className="px-6 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm font-medium transition-colors border border-white/10"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setAvatarUrl(null);
+                        setIsDeleteConfirmOpen(false);
+                      }}
+                      className="px-6 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-sm font-medium transition-colors shadow-[0_0_15px_rgba(239,68,68,0.4)]"
+                    >
+                      Confirm
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Nested Upload Choice Modal */}
+          <AnimatePresence>
+            {isUploadMenuOpen && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-md rounded-3xl"
+              >
+                <motion.div 
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.95, opacity: 0 }}
+                  className="bg-[#1a1e23] border border-cyan-500/30 rounded-xl p-6 w-full max-w-sm shadow-[0_0_40px_rgba(34,211,238,0.15)] relative mx-4 text-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Icon icon="ph:camera-plus-fill" className="text-cyan-400 text-5xl mx-auto mb-4 drop-shadow-[0_0_10px_rgba(34,211,238,0.8)]" />
+                  <h4 className="text-white font-bold mb-6 text-lg uppercase tracking-wider font-mono">Select Source</h4>
+                  
+                  <div className="flex flex-col gap-3">
+                    <button 
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="w-full px-6 py-3 bg-cyan-600/20 border border-cyan-500/50 text-cyan-400 rounded-xl text-sm font-mono font-bold hover:bg-cyan-600/40 hover:text-white transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Icon icon="ph:camera-bold" className="text-xl" /> Camera
+                    </button>
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="w-full px-6 py-3 bg-blue-600/20 border border-blue-500/50 text-blue-400 rounded-xl text-sm font-mono font-bold hover:bg-blue-600/40 hover:text-white transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Icon icon="ph:folder-open-bold" className="text-xl" /> Choose from Device
+                    </button>
+                    <button 
+                      onClick={() => setIsUploadMenuOpen(false)}
+                      className="w-full mt-2 px-6 py-3 bg-white/5 border border-white/10 text-white/60 rounded-xl text-sm font-mono font-bold hover:bg-white/10 hover:text-white transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
         </motion.div>
       )}
     </AnimatePresence>

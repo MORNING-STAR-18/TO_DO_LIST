@@ -1,0 +1,8 @@
+{
+  "name": "Life RPG - Glassy Cyberpunk",
+  "description": "A gamified To-Do web application with a cyberpunk theme, featuring tactile interactions and visual dopamine hits.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

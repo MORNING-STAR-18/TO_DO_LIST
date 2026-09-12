@@ -7,7 +7,6 @@ import { signInWithPopup } from 'firebase/auth';
 import { googleProvider } from './lib/firebase';
 import CyberDashboard from './components/CyberDashboard';
 import CharacterCreation from './components/CharacterCreation';
-import { PWAInstallButton } from './components/PWAInstallButton';
 
 export default function App() {
   const [user, loading] = useAuthState(auth);
@@ -56,10 +55,7 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#05090f] flex flex-col items-center justify-center font-sans relative">
-        <div className="absolute top-6 right-6 z-10">
-          <PWAInstallButton />
-        </div>
+      <div className="min-h-screen bg-[#05090f] flex flex-col items-center justify-center font-sans">
         <div className="w-20 h-20 bg-cyan-500/10 rounded-full border border-cyan-400/30 flex items-center justify-center mb-8 shadow-[0_0_30px_rgba(34,211,238,0.2)]">
           <Icon icon="ph:terminal-window-fill" className="text-4xl text-cyan-400" />
         </div>

@@ -13,6 +13,7 @@ import PerfectDayCelebration from "./PerfectDayCelebration";
 import GlobalCommsDrawer from "./GlobalCommsDrawer";
 import { signOut } from "firebase/auth";
 import { useCyberAudio } from "../hooks/useCyberAudio";
+import { PWAInstallButton } from "./PWAInstallButton";
 
 // --- 3D Task Card Component ---
 interface TaskCardProps {
@@ -897,6 +898,7 @@ export default function CyberDashboard() {
             
             {/* Player Info & Economy */}
             <div className="flex flex-wrap items-center gap-6 w-full md:w-auto justify-center md:justify-start">
+              <PWAInstallButton />
               
               <div className="flex items-center gap-4 relative" ref={dropdownRef}>
                 <div 

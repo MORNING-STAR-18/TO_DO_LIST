@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from "react";
 import { motion, useMotionValue, useTransform, useSpring } from "motion/react";
 import { Icon } from "@iconify/react";
-import { auth, googleProvider, setupRecaptcha } from "../firebase";
+import { auth, googleProvider, setupRecaptcha } from "../lib/firebase";
 import { signInWithPopup, signInWithPhoneNumber, ConfirmationResult } from "firebase/auth";
 
 export default function LumenHero() {

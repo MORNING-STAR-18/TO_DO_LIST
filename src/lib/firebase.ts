@@ -1,6 +1,6 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, RecaptchaVerifier } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 let app;
@@ -12,7 +12,10 @@ if (!getApps().length) {
   app = getApp();
 }
 
-db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+db = initializeFirestore(app, {
+  localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})
+}, firebaseConfig.firestoreDatabaseId);
+
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 

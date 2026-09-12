@@ -9,19 +9,20 @@ interface PerfectDayCelebrationProps {
 
 export default function PerfectDayCelebration({ totalTasks, completedTasks }: PerfectDayCelebrationProps) {
   const [showCelebration, setShowCelebration] = useState(false);
-  const [hasCelebrated, setHasCelebrated] = useState(false);
 
   useEffect(() => {
     if (totalTasks > 0 && completedTasks === totalTasks) {
-      if (!hasCelebrated) {
+      const today = new Date().toISOString().split('T')[0];
+      const lastCelebrated = localStorage.getItem('lastPerfectDayCelebration');
+      
+      if (lastCelebrated !== today) {
         setShowCelebration(true);
-        setHasCelebrated(true);
+        localStorage.setItem('lastPerfectDayCelebration', today);
       }
     } else {
-      setHasCelebrated(false);
       setShowCelebration(false);
     }
-  }, [totalTasks, completedTasks, hasCelebrated]);
+  }, [totalTasks, completedTasks]);
 
   return (
     <AnimatePresence>

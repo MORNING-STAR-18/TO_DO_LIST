@@ -25,7 +25,9 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: { is
 
   const [isDaily, setIsDaily] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isDifficultyDropdownOpen, setIsDifficultyDropdownOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const difficultyDropdownRef = useRef<HTMLDivElement>(null);
 
   // Auto-check isDaily for Quick Actions
   useEffect(() => {
@@ -35,6 +37,18 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: { is
       setIsDaily(false);
     }
   }, [taskType]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (difficultyDropdownRef.current && !difficultyDropdownRef.current.contains(event.target as Node)) {
+        setIsDifficultyDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   const PRESETS_TIMED = [
     { title: 'DSA / Code', difficulty: 'Hard', icon: 'ph:code-bold' },
@@ -451,18 +465,49 @@ export default function CreateTaskModal({ isOpen, onClose, onTaskCreated }: { is
 
               <div className="grid grid-cols-2 gap-4">
                 {taskType === 'timed' && (
-                  <div className="col-span-2">
+                  <div className="col-span-2 relative" ref={difficultyDropdownRef}>
                     <label className="block text-[10px] text-cyan-400 font-mono uppercase tracking-widest mb-1">Difficulty</label>
-                    <select
-                      value={difficulty}
-                      onChange={(e) => setDifficulty(e.target.value)}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-400 text-sm appearance-none"
-                    >
-                      <option>Tutorial</option>
-                      <option>Medium</option>
-                      <option>Hard</option>
-                      <option>Epic</option>
-                    </select>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={difficulty}
+                        onChange={(e) => setDifficulty(e.target.value)}
+                        onFocus={() => setIsDifficultyDropdownOpen(true)}
+                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-cyan-400 focus:bg-cyan-900/10 text-sm transition-colors"
+                        placeholder="Type or select..."
+                      />
+                      <div 
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 cursor-pointer p-1"
+                        onClick={() => setIsDifficultyDropdownOpen(!isDifficultyDropdownOpen)}
+                      >
+                        <Icon icon="ph:caret-down-bold" className={`transition-transform ${isDifficultyDropdownOpen ? 'rotate-180' : ''}`} />
+                      </div>
+                    </div>
+                    
+                    <AnimatePresence>
+                      {isDifficultyDropdownOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          className="absolute z-50 w-full mt-2 bg-[#0a0a0f]/95 border border-cyan-500/30 rounded-xl overflow-hidden backdrop-blur-md shadow-[0_0_20px_rgba(34,211,238,0.15)]"
+                        >
+                          {['Tutorial', 'Medium', 'Hard', 'Epic'].map((opt) => (
+                            <div
+                              key={opt}
+                              className="px-4 py-3 text-sm text-white/80 hover:text-cyan-300 hover:bg-cyan-500/10 cursor-pointer transition-colors flex items-center gap-2"
+                              onClick={() => {
+                                setDifficulty(opt);
+                                setIsDifficultyDropdownOpen(false);
+                              }}
+                            >
+                              <div className={`w-1.5 h-1.5 rounded-full ${difficulty === opt ? 'bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]' : 'bg-transparent'}`} />
+                              {opt}
+                            </div>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 )}
               </div>

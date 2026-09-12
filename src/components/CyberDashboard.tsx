@@ -10,6 +10,7 @@ import TaskHistoryModal from "./TaskHistoryModal";
 import NeuralProfileModal from "./NeuralProfileModal";
 import LinkAvatarModal from "./LinkAvatarModal";
 import PerfectDayCelebration from "./PerfectDayCelebration";
+import GlobalCommsDrawer from "./GlobalCommsDrawer";
 import { signOut } from "firebase/auth";
 import { useCyberAudio } from "../hooks/useCyberAudio";
 
@@ -1024,9 +1025,10 @@ export default function CyberDashboard() {
             </div>
 
           </aside>
-
         </main>
       </div>
+
+      <GlobalCommsDrawer />
     </div>
   );
 }
